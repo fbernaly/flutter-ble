@@ -24,6 +24,7 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_blue: 0.7.2
+  focus_detector: ^1.0.2
 
 
   # The following adds the Cupertino Icons font to your application.

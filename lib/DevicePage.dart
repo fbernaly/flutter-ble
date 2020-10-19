@@ -1,13 +1,16 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_blue/flutter_blue.dart';
 
 class DevicePage extends StatefulWidget {
   DevicePage({Key key, this.device}) : super(key: key);
 
   final BluetoothDevice device;
-  final Map<Guid, List<int>> readValues = new Map<Guid, List<int>>();
+  final FlutterBlue flutterBlue = FlutterBlue.instance;
 
   @override
   _DevicePageState createState() => _DevicePageState();
@@ -15,13 +18,18 @@ class DevicePage extends StatefulWidget {
 
 class _DevicePageState extends State<DevicePage> {
   final _writeController = TextEditingController();
-  BluetoothDevice _connectedDevice;
+  final _mtuController = TextEditingController();
   List<BluetoothService> _services = new List<BluetoothService>();
+  List<StreamSubscription<dynamic>> _subscriptions =
+      new List<StreamSubscription<dynamic>>();
+  Map<Guid, List<int>> readValues = new Map<Guid, List<int>>();
+  int _mtu = 0;
 
   @override
   void initState() {
     super.initState();
 
+    _subscribe();
     _discoverServices();
   }
 
@@ -33,11 +41,55 @@ class _DevicePageState extends State<DevicePage> {
         body: _buildBody(),
       );
 
+  @override
+  void dispose() {
+    super.dispose();
+    widget.device.disconnect();
+    _subscriptions.forEach((element) {
+      element.cancel();
+    });
+  }
+
   Widget _buildBody() {
     bool showSpinner = _services.length == 0;
     return Stack(
       children: <Widget>[
         if (showSpinner) Center(child: CircularProgressIndicator()),
+        _buildDeviceView(),
+      ],
+    );
+  }
+
+  Widget _buildDeviceView() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: <Widget>[
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(Platform.isIOS
+              ? "UUID: "
+              : (Platform.isAndroid ? "Address: " : "ID: ")),
+          SizedBox(height: 4),
+          Text(
+            widget.device.id.toString().toUpperCase(),
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          SizedBox(height: 4),
+          Row(
+            children: [
+              Text("MTU: "),
+              Text(
+                _mtu.toString(),
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Spacer(),
+              if (Platform.isAndroid)
+                _buildButton("REQUEST MTU", () async {
+                  _requestMtu();
+                })
+            ],
+          ),
+          Divider(),
+        ]),
         _buildListViewOfServices(),
       ],
     );
@@ -45,7 +97,8 @@ class _DevicePageState extends State<DevicePage> {
 
   Widget _buildListViewOfServices() {
     return ListView.builder(
-        padding: EdgeInsets.all(16),
+        shrinkWrap: true,
+        physics: ClampingScrollPhysics(),
         itemCount: _services.length,
         itemBuilder: (BuildContext context, int index) {
           BluetoothService service = _services[index];
@@ -88,8 +141,7 @@ class _DevicePageState extends State<DevicePage> {
                 ),
               ),
               SizedBox(height: 4),
-              Text('Value: ' +
-                  widget.readValues[characteristic.uuid].toString()),
+              Text('Value: ' + readValues[characteristic.uuid].toString()),
               SizedBox(height: 4),
               Row(
                 children: <Widget>[
@@ -137,6 +189,27 @@ class _DevicePageState extends State<DevicePage> {
     );
   }
 
+  void _subscribe() {
+    StreamSubscription<BluetoothState> stateSubscription =
+    widget.flutterBlue.state.listen((event) {
+      if (event != BluetoothState.on) Navigator.pop(context);
+    });
+    _subscriptions.add(stateSubscription);
+
+    StreamSubscription<BluetoothDeviceState> deviceStateSubscription =
+    widget.device.state.listen((event) {
+      if (event == BluetoothDeviceState.disconnected) Navigator.pop(context);
+    });
+    _subscriptions.add(deviceStateSubscription);
+
+    StreamSubscription<int> mtuSubscription = widget.device.mtu.listen((mtu) {
+      setState(() {
+        _mtu = mtu;
+      });
+    });
+    _subscriptions.add(mtuSubscription);
+  }
+
   Future<void> _discoverServices() async {
     List<BluetoothService> services = await widget.device.discoverServices();
     setState(() {
@@ -148,7 +221,7 @@ class _DevicePageState extends State<DevicePage> {
       BluetoothCharacteristic characteristic) async {
     var sub = characteristic.value.listen((value) {
       setState(() {
-        widget.readValues[characteristic.uuid] = value;
+        readValues[characteristic.uuid] = value;
       });
     });
     await characteristic.read();
@@ -167,6 +240,9 @@ class _DevicePageState extends State<DevicePage> {
                 Expanded(
                   child: TextField(
                     controller: _writeController,
+                    inputFormatters: <TextInputFormatter>[
+                      WhitelistingTextInputFormatter(RegExp('[0-9A-Fa-f]'))
+                    ],
                   ),
                 ),
               ],
@@ -175,9 +251,46 @@ class _DevicePageState extends State<DevicePage> {
               FlatButton(
                 child: Text("Send"),
                 onPressed: () {
-                  characteristic
-                      .write(utf8.encode(_writeController.value.text));
+                  final values = _getByteArray(_writeController.value.text);
+                  print("Write data: " + values.toString());
+                  characteristic.write(values);
                   Navigator.pop(context);
+                },
+              ),
+              FlatButton(
+                child: Text("Cancel"),
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+              ),
+            ],
+          );
+        });
+  }
+
+  Future<void> _requestMtu() async {
+    await showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text("Request Mtu"),
+            content: Row(
+              children: <Widget>[
+                Expanded(
+                  child: TextField(
+                    keyboardType: TextInputType.number,
+                    controller: _mtuController,
+                  ),
+                ),
+              ],
+            ),
+            actions: <Widget>[
+              FlatButton(
+                child: Text("Request"),
+                onPressed: () {
+                  Navigator.pop(context);
+                  int mtu = int.parse(_mtuController.value.text);
+                  widget.device.requestMtu(mtu);
                 },
               ),
               FlatButton(
@@ -194,8 +307,20 @@ class _DevicePageState extends State<DevicePage> {
   Future<void> _notifyCharacteristic(
       BluetoothCharacteristic characteristic) async {
     characteristic.value.listen((value) {
-      widget.readValues[characteristic.uuid] = value;
+      readValues[characteristic.uuid] = value;
     });
     await characteristic.setNotifyValue(true);
+  }
+
+  List<int> _getByteArray(String hexString) {
+    List<int> values = new List<int>();
+    String fullString = hexString;
+    if (fullString.length % 2 == 1) fullString = '0' + fullString;
+    for (int i = 0; i < fullString.length; i += 2) {
+      final hex = fullString.substring(i, i + 2);
+      final number = int.parse(hex, radix: 16);
+      values.add(number);
+    }
+    return values;
   }
 }

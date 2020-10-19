@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_blue/flutter_blue.dart';
+import 'package:focus_detector/focus_detector.dart';
 
 import 'DevicePage.dart';
 
@@ -15,48 +16,86 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-
   bool _showSpinner = false;
+  bool _isScanning = false;
+  bool _onFocus = false;
+  BluetoothState _bluetoothState;
+
+  // Vital for identifying our FocusDetector when a rebuild occurs.
+  final Key _focusDetectorKey = UniqueKey();
 
   @override
   void initState() {
     super.initState();
-    widget.flutterBlue.connectedDevices
-        .asStream()
-        .listen((List<BluetoothDevice> devices) {
-      for (BluetoothDevice device in devices) {
-        _addDeviceTolist(device);
-      }
-    });
-    widget.flutterBlue.scanResults.listen((List<ScanResult> results) {
-      for (ScanResult result in results) {
-        _addDeviceTolist(result.device);
-      }
-    });
-    widget.flutterBlue.startScan();
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          title: Text(widget.title),
+  Widget build(BuildContext context) => FocusDetector(
+        key: _focusDetectorKey,
+        onFocusGained: _onFocusGained,
+        onFocusLost: _onFocusLost,
+        child: Scaffold(
+          appBar: AppBar(
+            title: Text(widget.title),
+            actions: <Widget>[
+              FlatButton(
+                textColor: Colors.white,
+                onPressed: () {
+                  _startScanning();
+                },
+                child: Text("Scan"),
+                shape:
+                    CircleBorder(side: BorderSide(color: Colors.transparent)),
+              ),
+            ],
+          ),
+          body: _buildBody(),
         ),
-        body: _buildBody(),
       );
 
-  _addDeviceTolist(final BluetoothDevice device) {
-    if (!widget.devicesList.contains(device)) {
-      setState(() {
-        widget.devicesList.add(device);
-      });
-    }
-  }
-
   Widget _buildBody() {
+    String text = "";
+    switch (_bluetoothState) {
+      case BluetoothState.unknown:
+        text = "Bluetooth state is unknown";
+        break;
+
+      case BluetoothState.unavailable:
+        text = "Bluetooth state is unavailable";
+        break;
+
+      case BluetoothState.unauthorized:
+        text =
+            "Bluetooth state is unauthorized.\nGo to Settings and allow bluetooth access to the app.";
+        break;
+
+      case BluetoothState.turningOn:
+        text = "Bluetooth state is turningOn";
+        break;
+
+      case BluetoothState.turningOff:
+        text = "Bluetooth state is turningOff";
+        break;
+
+      case BluetoothState.off:
+        text = "Bluetooth state is off.\nTurn on bluetooth in your phone.";
+        break;
+
+      default:
+        break;
+    }
+
+    if (_bluetoothState != BluetoothState.on) {
+      return Center(
+          child: Text(
+        text,
+        textAlign: TextAlign.center,
+      ));
+    }
+
     return Stack(
       children: <Widget>[
-        if (_showSpinner || widget.devicesList.length ==  0)
-          Center(child: CircularProgressIndicator()),
+        if (_showSpinner) Center(child: CircularProgressIndicator()),
         _buildListViewOfDevices()
       ],
     );
@@ -109,25 +148,88 @@ class _HomePageState extends State<HomePage> {
               ],
             ));
           }),
-      onRefresh: _reScan,
+      onRefresh: _startScanning,
     );
   }
 
-  Future<void> _reScan() async {
+  void _onFocusGained() {
+    print('Home gained focus');
+    _onFocus = true;
+    _subscribe();
+    _startScanning();
+  }
+
+  void _onFocusLost() {
+    print('Home lost focus');
+    _onFocus = false;
+    _stopScanning();
+  }
+
+  _addDeviceTolist(final BluetoothDevice device) {
+    if (!widget.devicesList.contains(device)) {
+      setState(() {
+        widget.devicesList.add(device);
+        _showSpinner = false;
+      });
+    }
+  }
+
+  void _subscribe() {
+    widget.flutterBlue.state.listen((state) {
+      setState(() {
+        print("Bluetooth state: " + state.toString());
+        _bluetoothState = state;
+        if (state == BluetoothState.on) {
+          _startScanning();
+        }
+      });
+    });
+    widget.flutterBlue.isScanning.listen((value) {
+      if (_isScanning == value) return;
+      _isScanning = value;
+      print("Bluetooth is scanning: " + value.toString());
+    });
+    widget.flutterBlue.connectedDevices
+        .asStream()
+        .listen((List<BluetoothDevice> devices) {
+      for (BluetoothDevice device in devices) {
+        _addDeviceTolist(device);
+      }
+    });
+    widget.flutterBlue.scanResults.listen((List<ScanResult> results) {
+      for (ScanResult result in results) {
+        _addDeviceTolist(result.device);
+      }
+    });
+  }
+
+  Future<void> _startScanning() async {
+    if (_bluetoothState != BluetoothState.on) return;
     setState(() {
-      _showSpinner = false;
+      _showSpinner = true;
       widget.devicesList.clear();
-      widget.flutterBlue.stopScan();
+      _stopScanning();
     });
     Future.delayed(const Duration(milliseconds: 1000), () {
       setState(() {
+        if (_isScanning || !_onFocus) return;
+        _isScanning = true;
+        print("Start scanning...");
         widget.flutterBlue.startScan();
       });
     });
   }
 
+  void _stopScanning() {
+    if (_isScanning) {
+      print("Stop scanning...");
+      widget.flutterBlue.stopScan();
+    }
+  }
+
   Future<void> _connect(BluetoothDevice device) async {
-    widget.flutterBlue.stopScan();
+    if (_bluetoothState != BluetoothState.on) return;
+    _stopScanning();
     setState(() {
       _showSpinner = true;
     });
@@ -137,7 +239,7 @@ class _HomePageState extends State<HomePage> {
       if (e.code != 'already_connected') {
         throw e;
       }
-      _reScan();
+      _startScanning();
     } finally {
       setState(() {
         _showSpinner = false;
