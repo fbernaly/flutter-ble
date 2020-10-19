@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_blue/flutter_blue.dart';
 import 'package:focus_detector/focus_detector.dart';
@@ -9,7 +11,7 @@ class HomePage extends StatefulWidget {
 
   final String title;
   final FlutterBlue flutterBlue = FlutterBlue.instance;
-  final List<BluetoothDevice> devicesList = new List<BluetoothDevice>();
+  final List<ScanResult> scanResults = new List<ScanResult>();
 
   @override
   _HomePageState createState() => _HomePageState();
@@ -102,15 +104,18 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildListViewOfDevices() {
-    final List<BluetoothDevice> devices = widget.devicesList;
+    final List<ScanResult> scanResults = widget.scanResults;
+    final label =
+        Platform.isIOS ? "UUID: " : (Platform.isAndroid ? "Address: " : "ID: ");
     return RefreshIndicator(
       child: ListView.builder(
           padding: EdgeInsets.all(16),
-          itemCount: devices.length,
+          itemCount: scanResults.length,
           itemBuilder: (BuildContext context, int index) {
-            BluetoothDevice device = devices[index];
-            return Container(
-                child: Column(
+            ScanResult scanResult = scanResults[index];
+            BluetoothDevice device = scanResult.device;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: <Widget>[
@@ -123,10 +128,6 @@ class _HomePageState extends State<HomePage> {
                                 ? '(unknown device)'
                                 : device.name,
                             style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          FittedBox(
-                            fit: BoxFit.fitWidth,
-                            child: Text(device.id.toString()),
                           ),
                         ],
                       ),
@@ -144,9 +145,16 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ],
                 ),
+                FittedBox(
+                  fit: BoxFit.fitWidth,
+                  child: Text(label + device.id.toString()),
+                ),
+                Text("Type: " + device.type.toString()),
+                Text(scanResult.advertisementData.toString()),
+                Text("rssi: " + scanResult.rssi.toString()),
                 SizedBox(height: 8),
               ],
-            ));
+            );
           }),
       onRefresh: _startScanning,
     );
@@ -165,10 +173,10 @@ class _HomePageState extends State<HomePage> {
     _stopScanning();
   }
 
-  _addDeviceTolist(final BluetoothDevice device) {
-    if (!widget.devicesList.contains(device)) {
+  _addDeviceTolist(final ScanResult scanResult) {
+    if (!widget.scanResults.contains(scanResult)) {
+      widget.scanResults.add(scanResult);
       setState(() {
-        widget.devicesList.add(device);
         _showSpinner = false;
       });
     }
@@ -179,26 +187,19 @@ class _HomePageState extends State<HomePage> {
       setState(() {
         print("Bluetooth state: " + state.toString());
         _bluetoothState = state;
-        if (state == BluetoothState.on) {
-          _startScanning();
-        }
       });
+      if (state == BluetoothState.on) {
+        _startScanning();
+      }
     });
     widget.flutterBlue.isScanning.listen((value) {
       if (_isScanning == value) return;
       _isScanning = value;
       print("Bluetooth is scanning: " + value.toString());
     });
-    widget.flutterBlue.connectedDevices
-        .asStream()
-        .listen((List<BluetoothDevice> devices) {
-      for (BluetoothDevice device in devices) {
-        _addDeviceTolist(device);
-      }
-    });
     widget.flutterBlue.scanResults.listen((List<ScanResult> results) {
       for (ScanResult result in results) {
-        _addDeviceTolist(result.device);
+        _addDeviceTolist(result);
       }
     });
   }
@@ -207,16 +208,15 @@ class _HomePageState extends State<HomePage> {
     if (_bluetoothState != BluetoothState.on) return;
     setState(() {
       _showSpinner = true;
-      widget.devicesList.clear();
-      _stopScanning();
+      widget.scanResults.clear();
     });
+    _stopScanning();
     Future.delayed(const Duration(milliseconds: 1000), () {
-      setState(() {
-        if (_isScanning || !_onFocus) return;
-        _isScanning = true;
-        print("Start scanning...");
-        widget.flutterBlue.startScan();
-      });
+      if (_bluetoothState != BluetoothState.on || _isScanning || !_onFocus)
+        return;
+      _isScanning = true;
+      print("Start scanning...");
+      widget.flutterBlue.startScan();
     });
   }
 
