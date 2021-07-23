@@ -7,10 +7,10 @@ void main() => runApp(MyApp());
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
-    title: 'BLE Demo',
-    theme: ThemeData(
-      primarySwatch: Colors.blue,
-    ),
-    home: HomePage(title: 'Flutter BLE Demo'),
-  );
+        title: 'BLE Demo',
+        theme: ThemeData(
+          primarySwatch: Colors.blue,
+        ),
+        home: HomePage(title: 'Flutter BLE Demo'),
+      );
 }

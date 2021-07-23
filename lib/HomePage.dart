@@ -11,7 +11,7 @@ class HomePage extends StatefulWidget {
 
   final String title;
   final FlutterBlue flutterBlue = FlutterBlue.instance;
-  final List<ScanResult> scanResults = new List<ScanResult>();
+  final List<ScanResult> scanResults = <ScanResult>[];
 
   @override
   _HomePageState createState() => _HomePageState();
@@ -40,14 +40,13 @@ class _HomePageState extends State<HomePage> {
           appBar: AppBar(
             title: Text(widget.title),
             actions: <Widget>[
-              FlatButton(
-                textColor: Colors.white,
+              TextButton(
+                style: ButtonStyle(
+                    foregroundColor: MaterialStateProperty.all(Colors.white)),
                 onPressed: () {
                   _startScanning();
                 },
                 child: Text("Scan"),
-                shape:
-                    CircleBorder(side: BorderSide(color: Colors.transparent)),
               ),
             ],
           ),
@@ -133,8 +132,10 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ),
                     SizedBox(width: 16),
-                    FlatButton(
-                      color: Colors.blue,
+                    TextButton(
+                      style: ButtonStyle(
+                          backgroundColor:
+                              MaterialStateProperty.all(Colors.blue)),
                       child: Text(
                         'Connect',
                         style: TextStyle(color: Colors.white),

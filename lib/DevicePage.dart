@@ -18,9 +18,9 @@ class DevicePage extends StatefulWidget {
 class _DevicePageState extends State<DevicePage> {
   final _writeController = TextEditingController();
   final _mtuController = TextEditingController();
-  List<BluetoothService> _services = new List<BluetoothService>();
+  List<BluetoothService> _services = <BluetoothService>[];
   List<StreamSubscription<dynamic>> _subscriptions =
-      new List<StreamSubscription<dynamic>>();
+      <StreamSubscription<dynamic>>[];
   Map<Guid, List<int>> readValues = new Map<Guid, List<int>>();
   int _mtu = 0;
 
@@ -155,7 +155,7 @@ class _DevicePageState extends State<DevicePage> {
 
   List<ButtonTheme> _buildReadWriteNotifyButton(
       BluetoothCharacteristic characteristic) {
-    List<ButtonTheme> buttons = new List<ButtonTheme>();
+    List<ButtonTheme> buttons = <ButtonTheme>[];
     if (characteristic.properties.read) {
       buttons.add(_buildButton("READ", () async {
         _readCharacteristic(characteristic);
@@ -180,7 +180,7 @@ class _DevicePageState extends State<DevicePage> {
       height: 20,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: RaisedButton(
+        child: ElevatedButton(
           child: Text(title, style: TextStyle(color: Colors.white)),
           onPressed: onPressed,
         ),
@@ -190,13 +190,13 @@ class _DevicePageState extends State<DevicePage> {
 
   void _subscribe() {
     StreamSubscription<BluetoothState> stateSubscription =
-    widget.flutterBlue.state.listen((event) {
+        widget.flutterBlue.state.listen((event) {
       if (event != BluetoothState.on) Navigator.pop(context);
     });
     _subscriptions.add(stateSubscription);
 
     StreamSubscription<BluetoothDeviceState> deviceStateSubscription =
-    widget.device.state.listen((event) {
+        widget.device.state.listen((event) {
       if (event == BluetoothDeviceState.disconnected) Navigator.pop(context);
     });
     _subscriptions.add(deviceStateSubscription);
@@ -240,14 +240,15 @@ class _DevicePageState extends State<DevicePage> {
                   child: TextField(
                     controller: _writeController,
                     inputFormatters: <TextInputFormatter>[
-                      WhitelistingTextInputFormatter(RegExp('[0-9A-Fa-f]'))
+                      FilteringTextInputFormatter(RegExp('[0-9A-Fa-f]'),
+                          allow: true)
                     ],
                   ),
                 ),
               ],
             ),
             actions: <Widget>[
-              FlatButton(
+              TextButton(
                 child: Text("Send"),
                 onPressed: () {
                   final values = _getByteArray(_writeController.value.text);
@@ -256,7 +257,7 @@ class _DevicePageState extends State<DevicePage> {
                   Navigator.pop(context);
                 },
               ),
-              FlatButton(
+              TextButton(
                 child: Text("Cancel"),
                 onPressed: () {
                   Navigator.pop(context);
@@ -284,7 +285,7 @@ class _DevicePageState extends State<DevicePage> {
               ],
             ),
             actions: <Widget>[
-              FlatButton(
+              TextButton(
                 child: Text("Request"),
                 onPressed: () {
                   Navigator.pop(context);
@@ -292,7 +293,7 @@ class _DevicePageState extends State<DevicePage> {
                   widget.device.requestMtu(mtu);
                 },
               ),
-              FlatButton(
+              TextButton(
                 child: Text("Cancel"),
                 onPressed: () {
                   Navigator.pop(context);
@@ -312,7 +313,7 @@ class _DevicePageState extends State<DevicePage> {
   }
 
   List<int> _getByteArray(String hexString) {
-    List<int> values = new List<int>();
+    List<int> values = <int>[];
     String fullString = hexString;
     if (fullString.length % 2 == 1) fullString = '0' + fullString;
     for (int i = 0; i < fullString.length; i += 2) {
