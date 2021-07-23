@@ -173,7 +173,7 @@ class _HomePageState extends State<HomePage> {
     _stopScanning();
   }
 
-  _addDeviceTolist(final ScanResult scanResult) {
+  _addDeviceToList(final ScanResult scanResult) {
     if (!widget.scanResults.contains(scanResult)) {
       widget.scanResults.add(scanResult);
       setState(() {
@@ -199,7 +199,7 @@ class _HomePageState extends State<HomePage> {
     });
     widget.flutterBlue.scanResults.listen((List<ScanResult> results) {
       for (ScanResult result in results) {
-        _addDeviceTolist(result);
+        _addDeviceToList(result);
       }
     });
   }

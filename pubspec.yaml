@@ -23,7 +23,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_blue: 0.7.2
+  flutter_blue: 0.8.0
   focus_detector: ^1.0.2
 
 
